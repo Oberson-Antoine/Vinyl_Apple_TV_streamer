@@ -30,6 +30,7 @@ class NowPlayingResponse(BaseModel):
 
 class StatusResponse(BaseModel):
     capture_alive: bool
+    current_device: str
     last_capture_chunk_at: datetime | None
     capture_dropped_chunks: int
     fifo_connected: bool
@@ -40,3 +41,17 @@ class StatusResponse(BaseModel):
 
 class PlaybackActionResponse(BaseModel):
     status: str
+
+
+class AudioDeviceResponse(BaseModel):
+    device_string: str
+    description: str
+
+
+class AudioDevicesListResponse(BaseModel):
+    devices: list[AudioDeviceResponse]
+    current_device: str
+
+
+class SetAudioDeviceRequest(BaseModel):
+    device: str

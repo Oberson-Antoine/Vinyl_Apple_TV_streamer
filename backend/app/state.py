@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -23,10 +24,12 @@ class AppState:
 
     ring_buffer: RingBuffer
     owntone_client: OwnToneClient
+    current_alsa_device: str
 
     capture_alive: bool = False
     last_capture_chunk_at: datetime | None = None
     capture_dropped_chunks: int = 0
+    device_change_requested: asyncio.Event = field(default_factory=asyncio.Event)
 
     fifo_connected: bool = False
 

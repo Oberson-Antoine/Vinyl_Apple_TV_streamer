@@ -1,10 +1,12 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
-from app.api.routers import outputs, playback, status
+from app.api.routers import audio, outputs, playback, status
 from app.audio.capture import AudioCapture
 from app.audio.ring_buffer import RingBuffer
 from app.config import settings
@@ -36,7 +38,11 @@ async def _supervise(name: str, coro_fn, *args) -> None:
 async def lifespan(app: FastAPI):
     ring_buffer = RingBuffer(settings.ring_buffer_seconds, settings.bytes_per_second)
     owntone_client = OwnToneClient(settings.owntone_base_url, settings.owntone_http_timeout_seconds)
-    state = AppState(ring_buffer=ring_buffer, owntone_client=owntone_client)
+    state = AppState(
+        ring_buffer=ring_buffer,
+        owntone_client=owntone_client,
+        current_alsa_device=settings.alsa_device,
+    )
     app.state.app_state = state
 
     shazam = ShazamClient()
@@ -63,3 +69,10 @@ app = FastAPI(title="Vinyl AirPlay Streamer", lifespan=lifespan)
 app.include_router(outputs.router, prefix="/api/outputs", tags=["outputs"])
 app.include_router(playback.router, prefix="/api/playback", tags=["playback"])
 app.include_router(status.router, prefix="/api", tags=["status"])
+app.include_router(audio.router, prefix="/api/audio", tags=["audio"])
+
+# Mounted last so it acts as a fallback and doesn't shadow the /api/* routes above
+# (Starlette matches routes in registration order).
+app.mount(
+    "/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="static"
+)

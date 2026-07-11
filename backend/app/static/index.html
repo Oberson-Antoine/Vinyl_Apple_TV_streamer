@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vinyl AirPlay Streamer</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>Vinyl AirPlay Streamer</h1>
+  </header>
+
+  <main>
+    <section id="now-playing" class="card">
+      <h2>Now Playing</h2>
+      <div id="now-playing-content" class="now-playing-content">
+        <p class="muted">Nothing recognized yet.</p>
+      </div>
+    </section>
+
+    <section id="status" class="card">
+      <h2>Status</h2>
+      <ul id="status-list" class="status-list"></ul>
+    </section>
+
+    <section id="input-device" class="card">
+      <h2>Input Device</h2>
+      <div class="row">
+        <select id="device-select"></select>
+        <button id="device-apply">Use this device</button>
+      </div>
+    </section>
+
+    <section id="outputs" class="card">
+      <h2>Output Devices (AirPlay)</h2>
+      <ul id="outputs-list" class="outputs-list"></ul>
+      <div class="row">
+        <button id="outputs-apply">Apply selection</button>
+        <button id="playback-start">Start streaming</button>
+        <button id="playback-stop">Stop</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

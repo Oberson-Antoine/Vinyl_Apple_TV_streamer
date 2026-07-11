@@ -18,29 +18,40 @@ class AudioCapture:
 
     async def run(self, state: AppState, settings: Settings) -> None:
         """Supervising loop: (re)spawns arecord and restarts with backoff whenever it
-        dies (crash, USB unplug) — never lets a capture failure kill the process."""
+        dies (crash, USB unplug) — never lets a capture failure kill the process. A
+        device switch requested via the API (see `_run_once`) also comes back through
+        here as `"device_changed"`, which restarts immediately without backoff since
+        it's an intentional restart, not a failure."""
         backoff_schedule = settings.capture_restart_backoff_seconds
         attempt = 0
         while True:
             try:
-                await self._run_once(state, settings)
+                reason = await self._run_once(state, settings)
             except Exception:
                 logger.exception("capture loop crashed, restarting")
+                reason = "error"
             state.capture_alive = False
+            if reason == "device_changed":
+                attempt = 0
+                continue
             delay = backoff_schedule[min(attempt, len(backoff_schedule) - 1)]
             attempt += 1
             await asyncio.sleep(delay)
 
-    async def _run_once(self, state: AppState, settings: Settings) -> None:
+    async def _run_once(self, state: AppState, settings: Settings) -> str:
         """One arecord lifecycle: spawn it, its own FIFO writer + queue, run until
-        arecord exits or errors, then clean up."""
+        arecord exits/errors OR a device switch is requested, then clean up. Returns
+        "arecord_exited" or "device_changed" so the caller knows whether to back off."""
+        device = state.current_alsa_device
+        state.device_change_requested.clear()
+
         queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=settings.fifo_queue_maxsize)
         fifo_writer = FifoWriter(settings.fifo_path, settings)
         fifo_task = asyncio.create_task(fifo_writer.run(queue, state))
 
         proc = await asyncio.create_subprocess_exec(
             "arecord",
-            "-D", settings.alsa_device,
+            "-D", device,
             "-f", "S16_LE",
             "-c", str(settings.channels),
             "-r", str(settings.sample_rate),
@@ -50,12 +61,27 @@ class AudioCapture:
             stderr=asyncio.subprocess.PIPE,
         )
         state.capture_alive = True
-        logger.info("arecord started (pid=%s, device=%s)", proc.pid, settings.alsa_device)
+        logger.info("arecord started (pid=%s, device=%s)", proc.pid, device)
 
         stderr_task = asyncio.create_task(self._drain_stderr(proc))
         try:
-            await self._read_loop(proc, queue, state, settings)
+            read_task = asyncio.create_task(self._read_loop(proc, queue, state, settings))
+            change_task = asyncio.create_task(state.device_change_requested.wait())
+            done, _pending = await asyncio.wait(
+                {read_task, change_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if change_task in done:
+                logger.info("device switch requested, restarting arecord")
+                read_task.cancel()
+                await asyncio.gather(read_task, return_exceptions=True)
+                return "device_changed"
+            else:
+                change_task.cancel()
+                await asyncio.gather(change_task, return_exceptions=True)
+                return "arecord_exited"
         finally:
+            # USB audio devices are exclusive — the old process must be fully killed
+            # and reaped here before the next iteration can open a new device.
             fifo_task.cancel()
             stderr_task.cancel()
             await asyncio.gather(fifo_task, stderr_task, return_exceptions=True)

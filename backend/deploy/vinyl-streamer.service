@@ -1,0 +1,16 @@
+[Unit]
+Description=Vinyl AirPlay Streamer backend
+After=network-online.target sound.target owntone.service
+Wants=network-online.target owntone.service
+
+[Service]
+Type=simple
+User=sounox
+Group=sounox
+WorkingDirectory=/home/sounox/Vinyl_Apple_TV_streamer/backend
+ExecStart=/home/sounox/Vinyl_Apple_TV_streamer/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

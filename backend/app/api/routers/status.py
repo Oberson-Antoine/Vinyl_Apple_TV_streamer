@@ -25,6 +25,7 @@ async def now_playing(state: AppState = Depends(get_state)):
 async def status(state: AppState = Depends(get_state)):
     return StatusResponse(
         capture_alive=state.capture_alive,
+        current_device=state.current_alsa_device,
         last_capture_chunk_at=state.last_capture_chunk_at,
         capture_dropped_chunks=state.capture_dropped_chunks,
         fifo_connected=state.fifo_connected,
