@@ -73,6 +73,8 @@ function renderOutputs(outputs) {
           <input type="checkbox" value="${o.id}" ${o.selected ? "checked" : ""}>
           ${o.name} <span class="muted">(${o.type})</span>
         </label>
+        <input type="range" min="0" max="100" value="${o.volume}" data-output-id="${o.id}" class="volume-slider">
+        <span class="muted volume-value">${o.volume}%</span>
       </li>`
     )
     .join("");
@@ -109,8 +111,29 @@ document.getElementById("device-apply").addEventListener("click", async () => {
   deviceSelectDirty = false;
 });
 
-document.getElementById("outputs-list").addEventListener("change", () => {
-  outputsDirty = true;
+document.getElementById("outputs-list").addEventListener("change", (event) => {
+  if (event.target.matches('input[type="checkbox"]')) {
+    outputsDirty = true;
+  }
+});
+
+// Live-update the % label while dragging (no network call per tick).
+document.getElementById("outputs-list").addEventListener("input", (event) => {
+  if (!event.target.matches(".volume-slider")) return;
+  const label = event.target.parentElement.querySelector(".volume-value");
+  if (label) label.textContent = `${event.target.value}%`;
+});
+
+// Apply the volume once the user releases the slider.
+document.getElementById("outputs-list").addEventListener("change", async (event) => {
+  if (!event.target.matches(".volume-slider")) return;
+  const outputId = event.target.dataset.outputId;
+  const volume = Number(event.target.value);
+  await fetchJSON(`/api/outputs/${outputId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ volume }),
+  });
 });
 
 document.getElementById("outputs-apply").addEventListener("click", async () => {

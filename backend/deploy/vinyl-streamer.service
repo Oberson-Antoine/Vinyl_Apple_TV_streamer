@@ -8,6 +8,11 @@ Type=simple
 User=sounox
 Group=sounox
 WorkingDirectory=/home/sounox/Vinyl_Apple_TV_streamer/backend
+# Only needed if this machine's pyenv-built Python was relocated after being built
+# under a different user (e.g. built as root over SSH, then moved) — remove this
+# line if Python was built directly as this service's user. See README.md's
+# "Troubleshooting: relocated a pyenv install" section.
+Environment=LD_LIBRARY_PATH=/home/sounox/.pyenv/versions/3.12.13/lib
 ExecStart=/home/sounox/Vinyl_Apple_TV_streamer/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=5

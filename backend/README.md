@@ -67,6 +67,17 @@ pyenv install 3.12.13   # matches .python-version; takes a few minutes on a desk
                         # significantly longer on a Raspberry Pi — let it run
 ```
 
+**Important: run the `pyenv install` above as the actual user that will run the
+backend service**, not root, even over an SSH session that defaults to root. pyenv
+builds Python with a shared library (`libpythonX.Y.so`) and bakes an absolute path
+to it into the interpreter binary — if you build it as root (`/root/.pyenv/...`)
+and later move it to a different user's home, the interpreter breaks
+(`error while loading shared libraries: libpython3.12.so.1.0: cannot open shared
+object file`), even after `chown`, because the baked-in path still points at
+`/root/...`, which is normally unreadable by any other user anyway. If you've
+already hit this: see "Troubleshooting: relocated a pyenv install" below rather
+than recompiling.
+
 ## 3. Python environment
 
 ```
@@ -76,6 +87,26 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt   # or requirements.txt for a runtime-only install
 cp .env.example .env
 ```
+
+### Troubleshooting: relocated a pyenv install after building it as a different user
+
+If Python was built under `/root/.pyenv` (e.g. because the initial setup was done
+over SSH as root) and then moved to `/home/<user>/.pyenv`, every invocation of that
+interpreter — directly, via the venv, via `pip`, via `uvicorn` — needs
+`LD_LIBRARY_PATH` pointed at the new `lib/` directory, since the binary's baked-in
+rpath still refers to the old, now-gone `/root/...` path:
+
+```
+export LD_LIBRARY_PATH=/home/<user>/.pyenv/versions/3.12.13/lib
+```
+
+This needs to be set in **every shell session** that uses the venv (`export` isn't
+persistent), and — critically — also passed to the systemd service itself, or the
+deployed app won't start either. See the `Environment=LD_LIBRARY_PATH=...` line in
+`deploy/vinyl-streamer.service` below. Also note plain `sudo -u <user> <command>`
+strips `LD_LIBRARY_PATH` by default (a sudo security measure) even with `sudo -E`
+— wrap the command in `sudo -u <user> bash -c '...'` instead, setting the variable
+inside that inner shell.
 
 Edit `.env` for this machine:
 - `ALSA_DEVICE` — confirm with `arecord -l` (device numbering/naming can differ per
@@ -107,6 +138,9 @@ re-verify if anything looks off after a `shazamio` version bump).
 ## 6. Run manually to confirm everything works
 
 ```
+# only needed if you hit the relocated-pyenv issue above:
+export LD_LIBRARY_PATH=/home/<user>/.pyenv/versions/3.12.13/lib
+
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -142,6 +176,9 @@ Type=simple
 User=sounox
 Group=sounox
 WorkingDirectory=/home/sounox/Vinyl_Apple_TV_streamer/backend
+# Only needed if Python was relocated after being built under a different user —
+# see "Troubleshooting: relocated a pyenv install" above. Remove if not applicable.
+Environment=LD_LIBRARY_PATH=/home/sounox/.pyenv/versions/3.12.13/lib
 ExecStart=/home/sounox/Vinyl_Apple_TV_streamer/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=5
@@ -151,9 +188,11 @@ WantedBy=multi-user.target
 ```
 
 **Before installing on a new machine, edit `User=`/`Group=`/`WorkingDirectory=`/
-`ExecStart=`** to match that machine's actual username and where this repo and its
-`.venv` live — the checked-in file hardcodes the dev machine's values (`sounox`,
-`/home/sounox/...`).
+`ExecStart=`/`Environment=LD_LIBRARY_PATH=`** to match that machine's actual
+username and where this repo, its `.venv`, and its pyenv Python live — the
+checked-in file hardcodes this dev machine's values (`sounox`, `/home/sounox/...`).
+Remove the `Environment=` line entirely if that machine's Python wasn't relocated
+after being built (see the troubleshooting section above).
 
 It's ordered after OwnTone (`After=`) but only *wants* it (`Wants=`, not
 `Requires=`) — this app already degrades gracefully (`owntone_reachable: false`,

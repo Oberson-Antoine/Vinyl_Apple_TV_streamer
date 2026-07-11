@@ -69,6 +69,18 @@ soname-mismatch problem above.
 Building takes a few minutes on typical dev hardware; **on a Raspberry Pi (much
 slower CPU), budget significantly longer** — possibly 20-30+ minutes for `make`.
 
+**Also install `avahi-daemon` (a runtime dependency, not just the `libavahi-client-dev`
+headers above)** — OwnTone needs it running for AirPlay/mDNS device discovery, and
+its systemd unit fails to start entirely without it (`Unit avahi-daemon.socket not
+found`). This was already present by default on the original Ubuntu desktop dev
+machine, so it went unnoticed until a minimal Debian-based Pi image (no desktop
+extras) hit it directly:
+
+```
+sudo apt install -y avahi-daemon
+sudo systemctl enable --now avahi-daemon
+```
+
 ## 3. Set up the pipe library directory and permissions
 
 Replace `sounox` below with whichever user actually runs the Python backend
